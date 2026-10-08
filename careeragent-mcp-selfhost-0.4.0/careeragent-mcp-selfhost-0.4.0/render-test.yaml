@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: a02-careeragent-mcp-test-ngrok
+    runtime: docker
+    branch: codex/test-ngrok-candidate
+    rootDir: careeragent-mcp-selfhost-0.4.0/careeragent-mcp-selfhost-0.4.0
+    dockerfilePath: ./Dockerfile.test
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: off
+    envVars:
+      - key: MOCK_MODE
+        value: "false"
+      - key: MCP_ENVIRONMENT
+        value: TEST
+      - key: MCP_DATA_CLASS
+        value: FIXTURE
+      - key: MCP_IDENTITY_MODE
+        value: TEST_NGROK
+      - key: NODE_ENV
+        value: test
+      - key: CAREER_RUNTIME_BASE_URL
+        sync: false
+      - key: CAREER_RUNTIME_ALLOWED_ORIGIN
+        sync: false
+      - key: CAREER_RUNTIME_TIMEOUT_MS
+        value: "10000"
+      - key: A02_TUNNEL_KEY
+        sync: false
+      - key: MCP_BEARER_TOKEN
+        sync: false
+      - key: CAREER_RUNTIME_TOKEN
+        sync: false
+      - key: A02_TEST_JWKS_FILE
+        value: /etc/secrets/a02-test-public-jwks.json
+      - key: A02_TEST_JWKS_SHA256
+        sync: false
+      - key: MCP_TEST_SUBJECT
+        value: frontend_fixture_user_a
+      - key: MCP_TEST_EXPIRES_AT
+        sync: false

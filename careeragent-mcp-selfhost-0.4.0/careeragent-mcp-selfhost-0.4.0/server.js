@@ -1,5 +1,7 @@
 import express from "express";
 import { randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { loadConfig, createIdentityResolver, runtimeRequest as backendRequest, AdapterError } from "./adapter.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
@@ -8,14 +10,13 @@ import {
   isInitializeRequest
 } from "@modelcontextprotocol/sdk/types.js";
 
-const VERSION = "0.4.0";
+const VERSION = "0.4.1";
 const PORT = Number(process.env.PORT || 3000);
-const HOST = process.env.HOST || "0.0.0.0";
-const MOCK_MODE = (process.env.MOCK_MODE ?? "true").toLowerCase() === "true";
-const RUNTIME_BASE_URL = (process.env.CAREER_RUNTIME_BASE_URL ?? "").replace(/\/$/, "");
-const RUNTIME_TOKEN = process.env.CAREER_RUNTIME_TOKEN ?? "";
-const DEV_ACTOR_ID = process.env.CAREER_DEV_ACTOR_ID ?? "";
-const MCP_BEARER_TOKEN = process.env.MCP_BEARER_TOKEN ?? "";
+const config = loadConfig();
+const HOST = config.host;
+const MOCK_MODE = config.mock;
+const resolveIdentity = createIdentityResolver(config);
+const caller = new AsyncLocalStorage();
 
 const WORKFLOW_TYPES = ["PROFILE_BUILD", "RECOMMEND_AND_PLAN"];
 const VIEW_TYPES = [
@@ -100,6 +101,7 @@ function toolResult(value) {
 }
 
 function toolError(error) {
+  if (error instanceof AdapterError) return { ...toolResult(error.envelope), isError: true };
   const message = error instanceof Error ? error.message : String(error);
   return {
     isError: true,
@@ -108,7 +110,7 @@ function toolError(error) {
       text: JSON.stringify({
         success: false,
         error: {
-          code: "MCP_ADAPTER_ERROR",
+          code: "MCP_INVALID_ARGUMENT",
           message,
           retryable: false
         }
@@ -118,32 +120,7 @@ function toolError(error) {
 }
 
 async function runtimeRequest(path, init = {}) {
-  if (!RUNTIME_BASE_URL) {
-    throw new Error("CAREER_RUNTIME_BASE_URL is required when MOCK_MODE=false");
-  }
-
-  const headers = new Headers(init.headers ?? {});
-  headers.set("content-type", "application/json");
-  if (RUNTIME_TOKEN) headers.set("authorization", `Bearer ${RUNTIME_TOKEN}`);
-
-  // Development-only fallback. Production should map trusted TBox identity
-  // outside model-provided tool arguments.
-  if (DEV_ACTOR_ID) headers.set("x-career-actor-id", DEV_ACTOR_ID);
-
-  const response = await fetch(`${RUNTIME_BASE_URL}${path}`, { ...init, headers });
-  const raw = await response.text();
-
-  let body;
-  try {
-    body = raw ? JSON.parse(raw) : {};
-  } catch {
-    body = { raw };
-  }
-
-  if (!response.ok) {
-    throw new Error(`Runtime HTTP ${response.status}: ${JSON.stringify(body)}`);
-  }
-  return body;
+  return backendRequest(config, caller.getStore(), path, init);
 }
 
 function clone(value) {
@@ -428,6 +405,11 @@ const tools = [
 
 async function handleTool(name, rawArgs) {
   const args = asObject(rawArgs ?? {}, "arguments");
+  const definition = tools.find(tool => tool.name === name);
+  if (!definition || Object.keys(args).some(key => !(key in definition.inputSchema.properties))) {
+    throw new Error('Unknown tool or argument; identity cannot be supplied by tool arguments');
+  }
+  const actor = caller.getStore()?.actor;
 
   if (name === "career_run_start") {
     const command_id = requireString(args, "command_id");
@@ -438,7 +420,7 @@ async function handleTool(name, rawArgs) {
     }
     const payload = parseJsonObject(args.payload_json, "payload_json");
 
-    const normalized = { command_id, idempotency_key, workflow_type, payload };
+    const normalized = { command_id, idempotency_key, workflow_type, actor, payload };
     return MOCK_MODE
       ? mockStart(normalized)
       : runtimeRequest("/career/runs", {
@@ -480,6 +462,7 @@ async function handleTool(name, rawArgs) {
       runId,
       command_id,
       idempotency_key,
+      actor,
       action,
       expected_state_version,
       payload,
@@ -528,6 +511,7 @@ async function handleTool(name, rawArgs) {
         body: JSON.stringify({
           command_id,
           idempotency_key,
+          actor,
           action: "CONFIRM_CAREER_TARGET",
           expected_state_version,
           subject_ref,
@@ -604,20 +588,13 @@ app.use((req, res, next) => {
   next();
 });
 
-function authorize(req, res, next) {
-  if (!MCP_BEARER_TOKEN) {
+async function authorize(req, res, next) {
+  try {
+    req.trustedIdentity = await resolveIdentity(req.get('authorization'));
     next();
-    return;
+  } catch (error) {
+    res.status(401).json(error instanceof AdapterError ? error.envelope : { success: false, error: { code: 'MCP_IDENTITY_INVALID', message: 'Identity verification failed', retryable: false } });
   }
-
-  const expected = `Bearer ${MCP_BEARER_TOKEN}`;
-  if (req.get("authorization") !== expected) {
-    res.status(401).json({
-      error: "unauthorized"
-    });
-    return;
-  }
-  next();
 }
 
 app.get("/", (_req, res) => {
@@ -627,7 +604,9 @@ app.get("/", (_req, res) => {
     transport: "streamableHttp",
     endpoint: "/mcp",
     health: "/health",
-    mock_mode: MOCK_MODE
+    mock_mode: MOCK_MODE,
+    identity_mode: MOCK_MODE ? 'MOCK' : config.identityMode,
+    environment: config.environment
   });
 });
 
@@ -636,7 +615,9 @@ app.get("/health", (_req, res) => {
     ok: true,
     service: "a02-careeragent-mcp",
     version: VERSION,
-    mock_mode: MOCK_MODE
+    mock_mode: MOCK_MODE,
+    identity_mode: MOCK_MODE ? 'MOCK' : config.identityMode,
+    environment: config.environment
   });
 });
 
@@ -681,7 +662,7 @@ app.post("/mcp", authorize, async (req, res) => {
       return;
     }
 
-    await transport.handleRequest(req, res, req.body);
+    await caller.run(req.trustedIdentity, () => transport.handleRequest(req, res, req.body));
   } catch (error) {
     console.error("[POST /mcp error]", error);
 

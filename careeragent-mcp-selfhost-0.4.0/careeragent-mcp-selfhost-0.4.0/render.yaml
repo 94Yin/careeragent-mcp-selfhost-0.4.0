@@ -5,4 +5,8 @@ services:
     healthCheckPath: /health
     envVars:
       - key: MOCK_MODE
-        value: "true"
+        value: "false"
+      - key: CAREER_RUNTIME_BASE_URL
+        sync: false
+      - key: MCP_ENVIRONMENT
+        value: "PRODUCTION"

@@ -1,0 +1,4 @@
+node_modules/
+.env
+.env.local.ps1
+.runtime/

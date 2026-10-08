@@ -1,0 +1,181 @@
+{
+  "tools": [
+    {
+      "name": "career_run_start",
+      "description": "创建职业工作流。用户明确同意后调用；读取服务器返回的 run_id、state_version、next_actions，不得用聊天历史代替服务器状态。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "description": "本次操作唯一命令 ID；同一操作重试保持不变。"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键；同一操作重试保持不变。"
+          },
+          "workflow_type": {
+            "type": "string",
+            "enum": [
+              "PROFILE_BUILD",
+              "RECOMMEND_AND_PLAN"
+            ],
+            "description": "仅允许 PROFILE_BUILD 或 RECOMMEND_AND_PLAN。"
+          },
+          "payload_json": {
+            "type": "string",
+            "description": "业务 payload 的 JSON 字符串；必须解码为对象，不得携带身份或凭证。"
+          }
+        },
+        "required": [
+          "command_id",
+          "idempotency_key",
+          "workflow_type",
+          "payload_json"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "career_run_status",
+      "description": "查询工作流真实状态、允许动作、产物引用与事件游标。继续或确认前优先调用。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "description": "必须来自服务器返回的 run_id，不得编造。"
+          }
+        },
+        "required": [
+          "runId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "career_run_continue",
+      "description": "仅提交最新 next_actions 中允许的动作；expected_state_version 必须来自最新状态。subject_ref_json/target_ref_json 为可选 JSON 字符串。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "command_id": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "description": "必须来自最新 career_run_status.next_actions。"
+          },
+          "expected_state_version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "payload_json": {
+            "type": "string",
+            "description": "业务 payload 的 JSON 字符串；必须解码为对象。"
+          },
+          "subject_ref_json": {
+            "type": "string",
+            "description": "可选 subject_ref JSON 字符串，形如 {\"id\":\"...\",\"version\":1,\"type\":\"...\"}。"
+          },
+          "target_ref_json": {
+            "type": "string",
+            "description": "可选 target_ref JSON 字符串；type 仅允许 LearningTaskInstance / PracticeAttempt / Scorecard / ReviewCase。"
+          }
+        },
+        "required": [
+          "runId",
+          "command_id",
+          "idempotency_key",
+          "action",
+          "expected_state_version",
+          "payload_json"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "career_decision_confirm",
+      "description": "确认目标职业。仅在用户明确确认且最新 next_actions 允许 CONFIRM_CAREER_TARGET 时调用。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "command_id": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "expected_state_version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "subject_ref_json": {
+            "type": "string",
+            "description": "当前推荐产物引用的 JSON 字符串，必须来自服务器 artifact_refs。"
+          },
+          "ranking_item_id": {
+            "type": "string",
+            "description": "必须来自当前推荐结果。"
+          },
+          "recommendation_group": {
+            "type": "string",
+            "enum": [
+              "CURRENT_FIT",
+              "DEVELOPMENT"
+            ]
+          }
+        },
+        "required": [
+          "runId",
+          "command_id",
+          "idempotency_key",
+          "expected_state_version",
+          "subject_ref_json",
+          "ranking_item_id",
+          "recommendation_group"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "artifact_get",
+      "description": "使用工作流返回的 artifact_refs 读取展示结果。artifactId 必须来自服务器；仅展示响应事实和证据。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "view": {
+            "type": "string",
+            "enum": [
+              "PROFILE",
+              "CAREER_CANDIDATES",
+              "PATH",
+              "SKILL_TREE",
+              "TASK_BOARD",
+              "TRAINING",
+              "GROWTH_REPORT",
+              "CAREER_GRAPH"
+            ]
+          }
+        },
+        "required": [
+          "artifactId",
+          "view"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
