@@ -2,6 +2,8 @@
 
 This is an isolated TEST/FIXTURE candidate. It does not implement formal Ant user identity or establish a public tunnel. Keep the existing service unchanged. Never publish without explicit approval.
 
+The assigned development domain `henchman-majority-saddled.ngrok-free.dev` is supported. Set `CAREER_RUNTIME_ALLOWED_ORIGIN` to exactly `https://henchman-majority-saddled.ngrok-free.dev` and `CAREER_RUNTIME_BASE_URL` to that origin plus `/api/v1`. Supporting the `ngrok-free.dev` suffix does not permit switching to another origin: the exact configured origin, HTTPS, public-key pin, verified fixture identity and Gateway key remain mandatory. Wildcard/nested domains, lookalike suffixes, non-default ports, URL credentials, query strings and fragments are rejected. Domain support does not attest to account capture/export settings or authorize public exposure.
+
 ## Identity and key distribution
 
 `TEST_LOCAL` continues using the original loopback JWKS. `TEST_NGROK` never fetches a JWKS URL. It loads one RSA public key from `A02_TEST_JWKS_FILE`, verifies its exact bytes against the independently approved `A02_TEST_JWKS_SHA256`, rejects private/unknown key fields, requires RSA >=2048 bits / RS256 / signature use, and retains the verified document in memory. A file replacement cannot silently change the loaded trust anchor. A changed file on restart fails unless its approved digest also changes. Deployment administrators who can replace both trust anchor and digest remain trusted; this is not protection against a compromised deployment administrator.

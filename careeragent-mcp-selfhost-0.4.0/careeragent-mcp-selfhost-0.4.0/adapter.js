@@ -33,7 +33,7 @@ export function loadConfig(env = process.env) {
     let permitted;
     try { permitted = new URL(origin); } catch { throw new Error('Exact HTTPS origin required'); }
     if (permitted.protocol !== 'https:' || origin !== permitted.origin || loopback(permitted.hostname)
-        || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.(?:ngrok-free\.app|ngrok\.app|ngrok\.dev)$/.test(permitted.hostname)
+        || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.(?:ngrok-free\.(?:app|dev)|ngrok\.app|ngrok\.dev)$/.test(permitted.hostname)
         || permitted.port || base.href !== `${origin}/api/v1`) throw new Error('Exact ngrok HTTPS origin and /api/v1 required');
     if (!/^[a-f0-9]{64}$/i.test(env.A02_TUNNEL_KEY || '')) throw new Error('A02_TUNNEL_KEY required');
     if (!env.CAREER_RUNTIME_TOKEN || (env.MCP_BEARER_TOKEN || '').length < 32) throw new Error('Trusted TEST credentials required');

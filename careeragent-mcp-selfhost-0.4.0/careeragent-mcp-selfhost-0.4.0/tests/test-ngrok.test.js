@@ -25,6 +25,20 @@ const env=(extra={})=>({MOCK_MODE:'false',MCP_ENVIRONMENT:'TEST',MCP_DATA_CLASS:
  CAREER_RUNTIME_BASE_URL:'https://controlled.ngrok-free.app/api/v1',CAREER_RUNTIME_ALLOWED_ORIGIN:'https://controlled.ngrok-free.app',A02_TUNNEL_KEY:key,
  CAREER_RUNTIME_TOKEN:token,MCP_BEARER_TOKEN:caller,MCP_TEST_SUBJECT:'frontend_fixture_user_a',MCP_TEST_EXPIRES_AT:new Date(Date.now()+3600000).toISOString(),
  A02_TEST_JWKS_FILE:file,A02_TEST_JWKS_SHA256:createHash('sha256').update(bytes).digest('hex'),...extra});
+
+const assignedOrigin='https://henchman-majority-saddled.ngrok-free.dev';
+const devEnv=(extra={})=>env({CAREER_RUNTIME_ALLOWED_ORIGIN:assignedOrigin,CAREER_RUNTIME_BASE_URL:`${assignedOrigin}/api/v1`,...extra});
+test('assigned ngrok-free.dev exact HTTPS origin validates pinned fixture identity',async()=>{
+ const config=loadConfig(devEnv());
+ assert.equal(config.allowedOrigin,assignedOrigin);
+ assert.equal(config.base,`${assignedOrigin}/api/v1`);
+ const identity=await createIdentityResolver(config)(`Bearer ${caller}`);
+ assert.equal(identity.actor.actor_id,'frontend_fixture_user_a');
+});
+for(const [name,origin] of Object.entries({http:'http://henchman-majority-saddled.ngrok-free.dev',nested:'https://extra.henchman-majority-saddled.ngrok-free.dev',suffix:'https://henchman-majority-saddled.ngrok-free.dev.evil.example',port:`${assignedOrigin}:8443`,credentials:'https://user:password@henchman-majority-saddled.ngrok-free.dev',wildcard:'https://*.ngrok-free.dev',path:`${assignedOrigin}/extra`,query:`${assignedOrigin}?x=1`,fragment:`${assignedOrigin}#x`}))
+ test(`ngrok-free.dev rejects ${name}`,()=>assert.throws(()=>loadConfig(devEnv({CAREER_RUNTIME_ALLOWED_ORIGIN:origin,CAREER_RUNTIME_BASE_URL:`${origin}/api/v1`}))));
+for(const [name,override] of Object.entries({differentOrigin:{CAREER_RUNTIME_BASE_URL:'https://another.ngrok-free.dev/api/v1'},mock:{MOCK_MODE:'true'},production:{MCP_ENVIRONMENT:'PRODUCTION'},liveData:{MCP_DATA_CLASS:'LIVE'},missingKey:{A02_TUNNEL_KEY:''},wrongPin:{A02_TEST_JWKS_SHA256:'0'.repeat(64)}}))
+ test(`ngrok-free.dev preserves ${name} rejection`,()=>assert.throws(()=>loadConfig(devEnv(override))));
 test('TEST_NGROK valid pinned public key and verified fixture actor',async()=>{const config=loadConfig(env());const identity=await createIdentityResolver(config)(`Bearer ${caller}`);assert.deepEqual(identity.actor,{actor_id:'frontend_fixture_user_a',actor_type:'PERSONAL_USER'});assert.equal(identity.token,token);});
 for(const [name,override] of Object.entries({
  mock:{MOCK_MODE:'true'},environment:{MCP_ENVIRONMENT:'PRODUCTION'},nodeProduction:{NODE_ENV:'production'},data:{MCP_DATA_CLASS:'PRODUCTION'},
